@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Coffee_VM</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: #edf1fa;
+      background: #10131b;
+      font: 15px system-ui, sans-serif;
+    }
+
+    main {
+      width: min(1100px, calc(100% - 32px));
+      margin: auto;
+      padding: 30px 0;
+    }
+
+    h1 { margin-top: 0; }
+
+    .toolbar {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    button {
+      padding: 10px 15px;
+      border: 1px solid #2b3345;
+      border-radius: 8px;
+      color: white;
+      background: #222939;
+      cursor: pointer;
+    }
+
+    button.primary {
+      color: #171223;
+      background: #b28cff;
+      border-color: #b28cff;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 420px;
+      padding: 15px;
+      border: 1px solid #2b3345;
+      border-radius: 8px;
+      outline: none;
+      resize: vertical;
+      color: #e6edfa;
+      background: #121620;
+      font: 14px/1.6 monospace;
+    }
+
+    #output { color: #8fe3b0; }
+
+    #status { min-height: 24px; color: #9aa6bd; }
+
+    @media (max-width: 700px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Coffee_VM</h1>
+
+    <div class="toolbar">
+      <button class="primary" id="compile">Compile</button>
+      <button id="clear">Clear</button>
+      <button id="copy">Copy JavaScript</button>
+    </div>
+
+    <div class="grid">
+      <textarea id="source" spellcheck="false" aria-label="Java source"></textarea>
+      <textarea id="output" spellcheck="false" aria-label="JavaScript output" readonly></textarea>
+    </div>
+
+    <p id="status">Ready.</p>
+  </main>
+
+  <script>
+    const source = document.getElementById("source");
+    const output = document.getElementById("output");
+    const status = document.getElementById("status");
+
+    source.value = `public class Main {
+  public static void main(String[] args) {
+    String name = "World";
+    int count = 3;
+
+    System.out.println("Hello, " + name + "!");
+
+    for (int i = 1; i <= count; i++) {
+      System.out.println("Count: " + i);
+    }
+  }
+}`;
+
+    function compileJava(java) {
+      let js = java;
+
+      // Remove Java comments.
+      js = js.replace(/\/\*[\s\S]*?\*\//g, "");
+      js = js.replace(/\/\/.*$/gm, "");
+
+      // Extract main() method content.
+      const main = /(?:public\s+)?static\s+void\s+main\s*\(\s*String(?:\[\s*\]|\s*\.\.\.)\s+\w+\s*\)\s*\{([\s\S]*?)\n\s*\}/.exec(js);
+
+      if (!main) {
+        throw new Error("Could not find: public static void main(String[] args)");
+      }
+
+      js = main[1];
+
+      // Convert Java output calls.
+      js = js.replace(/System\.out\.println\s*\(/g, "console.log(");
+      js = js.replace(/System\.out\.print\s*\(/g, "console.log(");
+      js = js.replace(/System\.err\.println\s*\(/g, "console.error(");
+
+      // Convert basic Java variable declarations.
+      js = js.replace(
+        /\b(?:final\s+)?(?:byte|short|int|long|float|double|boolean|char|String)\s+(?:(\w+)\[\])\s*([A-Za-z_$][\w$]*)/g,
+        "let $2"
+      );
+      js = js.replace(
+        /\b(?:final\s+)?(?:byte|short|int|long|float|double|boolean|char|String)\s+([A-Za-z_$][\w$]*)/g,
+        "let $1"
+      );
+
+      // Convert enhanced for loops.
+      js = js.replace(
+        /for\s*\(\s*(?:(?:String|int|long|double|float|boolean|char)\s+)?([A-Za-z_$][\w$]*)\s*:\s*([^)]*)\)/g,
+        "for (const $1 of $2)"
+      );
+
+      // Convert Java casting.
+      js = js.replace(/\b(?:int)\s*\(\s*([^)]*)\)/g, "Math.trunc($1)");
+
+      // Convert common Java conversions.
+      js = js.replace(/Integer\.parseInt\(/g, "Number.parseInt(");
+      js = js.replace(/Double\.parseDouble\(/g, "Number.parseFloat(");
+      js = js.replace(/Float\.parseFloat\(/g, "Number.parseFloat(");
+      js = js.replace(/System\.currentTimeMillis\(\)/g, "Date.now()");
+
+      return "// Coffee_VM output\n" + js.trim();
+    }
+
+    document.getElementById("compile").addEventListener("click", () => {
+      try {
+        output.value = compileJava(source.value);
+        status.textContent = "Compilation successful.";
+      } catch (error) {
+        output.value = "";
+        status.textContent = "Error: " + error.message;
+      }
+    });
+
+    document.getElementById("clear").addEventListener("click", () => {
+      source.value = "";
+      output.value = "";
+      status.textContent = "Ready.";
+      source.focus();
+    });
+
+    document.getElementById("copy").addEventListener("click", async () => {
+      if (!output.value) {
+        status.textContent = "There is no JavaScript to copy.";
+        return;
+      }
+
+      await navigator.clipboard.writeText(output.value);
+      status.textContent = "JavaScript copied.";
+    });
+  </script>
+</body>
+</html>
